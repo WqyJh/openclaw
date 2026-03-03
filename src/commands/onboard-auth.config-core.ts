@@ -294,7 +294,21 @@ export function applyXiaomiProviderConfig(cfg: OpenClawConfig): OpenClawConfig {
 
 export function applyXiaomiConfig(cfg: OpenClawConfig): OpenClawConfig {
   const next = applyXiaomiProviderConfig(cfg);
-  return applyAgentDefaultModelPrimary(next, XIAOMI_DEFAULT_MODEL_REF);
+  // Set primary model to mimo-pro, image model to mimo-omni
+  const cfgWithPrimary = applyAgentDefaultModelPrimary(next, "xiaomi/mimo-0218_pro");
+  // Configure image model
+  return {
+    ...cfgWithPrimary,
+    agents: {
+      ...cfgWithPrimary.agents,
+      defaults: {
+        ...cfgWithPrimary.agents?.defaults,
+        imageModel: {
+          primary: "xiaomi/mimo_omni",
+        },
+      },
+    },
+  };
 }
 
 /**

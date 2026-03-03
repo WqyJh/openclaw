@@ -8,6 +8,7 @@ import { minimaxProvider } from "./minimax/index.js";
 import { mistralProvider } from "./mistral/index.js";
 import { moonshotProvider } from "./moonshot/index.js";
 import { openaiProvider } from "./openai/index.js";
+import { xiaomiProvider } from "./xiaomi/index.js";
 import { zaiProvider } from "./zai/index.js";
 
 const PROVIDERS: MediaUnderstandingProvider[] = [
@@ -18,6 +19,7 @@ const PROVIDERS: MediaUnderstandingProvider[] = [
   minimaxProvider,
   moonshotProvider,
   mistralProvider,
+  xiaomiProvider,
   zaiProvider,
   deepgramProvider,
 ];

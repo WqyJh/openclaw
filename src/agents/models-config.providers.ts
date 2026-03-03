@@ -109,6 +109,20 @@ const XIAOMI_DEFAULT_COST = {
   cacheWrite: 0,
 };
 
+// MIMO Pro and Omni models
+const MIMO_PRO_MODEL_ID = "mimo-0218_pro";
+const MIMO_OMNI_MODEL_ID = "mimo_omni";
+const MIMO_PRO_CONTEXT_WINDOW = 200000;
+const MIMO_PRO_MAX_TOKENS = 32000;
+const MIMO_OMNI_CONTEXT_WINDOW = 200000;
+const MIMO_OMNI_MAX_TOKENS = 32000;
+const MIMO_COST = {
+  input: 0,
+  output: 0,
+  cacheRead: 0,
+  cacheWrite: 0,
+};
+
 const MOONSHOT_BASE_URL = "https://api.moonshot.ai/v1";
 const MOONSHOT_DEFAULT_MODEL_ID = "kimi-k2.5";
 const MOONSHOT_DEFAULT_CONTEXT_WINDOW = 256000;
@@ -741,7 +755,7 @@ function buildBytePlusCodingProvider(): ProviderConfig {
 export function buildXiaomiProvider(): ProviderConfig {
   return {
     baseUrl: XIAOMI_BASE_URL,
-    api: "anthropic-messages",
+    api: "openai-completions",
     models: [
       {
         id: XIAOMI_DEFAULT_MODEL_ID,
@@ -751,6 +765,24 @@ export function buildXiaomiProvider(): ProviderConfig {
         cost: XIAOMI_DEFAULT_COST,
         contextWindow: XIAOMI_DEFAULT_CONTEXT_WINDOW,
         maxTokens: XIAOMI_DEFAULT_MAX_TOKENS,
+      },
+      {
+        id: MIMO_PRO_MODEL_ID,
+        name: "Xiaomi MiMo Pro",
+        reasoning: false,
+        input: ["text", "image"],
+        cost: MIMO_COST,
+        contextWindow: MIMO_PRO_CONTEXT_WINDOW,
+        maxTokens: MIMO_PRO_MAX_TOKENS,
+      },
+      {
+        id: MIMO_OMNI_MODEL_ID,
+        name: "Xiaomi MiMo Omni",
+        reasoning: false,
+        input: ["text", "image", "audio", "video"],
+        cost: MIMO_COST,
+        contextWindow: MIMO_OMNI_CONTEXT_WINDOW,
+        maxTokens: MIMO_OMNI_MAX_TOKENS,
       },
     ],
   };
