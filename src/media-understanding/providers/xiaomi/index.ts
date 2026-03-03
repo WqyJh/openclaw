@@ -5,8 +5,8 @@ import { describeXiaomiVideo } from "./video.js";
 
 export const xiaomiProvider: MediaUnderstandingProvider = {
   id: "xiaomi",
-  capabilities: ["image"],  // 根据实际测试，只支持图像
+  capabilities: ["image", "audio", "video"],  // 支持多模态能力
   describeImage: describeImageWithModel,
-  // describeVideo: describeXiaomiVideo,  // 暂不支持视频
-  // transcribeAudio: transcribeXiaomiAudio,  // 暂不支持音频
+  describeVideo: describeXiaomiVideo,
+  transcribeAudio: transcribeXiaomiAudio,
 };
