@@ -1,21 +1,56 @@
-import path from "node:path";
 import type { AudioTranscriptionRequest, AudioTranscriptionResult } from "../../types.js";
 import {
   assertOkOrThrowHttpError,
   normalizeBaseUrl,
-  postTranscriptionRequest,
-  requireTranscriptionText,
+  fetchWithTimeoutGuarded,
 } from "../shared.js";
 
-// Xiaomi MIMO Omni audio transcription endpoint
-// Note: This is a placeholder implementation. The actual API endpoint and format
-// may need to be adjusted based on Xiaomi's MIMO Omni API documentation.
+// Xiaomi MIMO Omni audio transcription endpoint (using chat/completion like Gemini)
 const DEFAULT_XIAOMI_AUDIO_BASE_URL = "http://s-20251121150535-h1owo-fqueo.wlcb-prod-3-cloudml.xiaomi.srv/v1";
 const DEFAULT_XIAOMI_AUDIO_MODEL = "mimo_omni";
+const DEFAULT_XIAOMI_AUDIO_PROMPT = "Transcribe the audio.";
+
+type XiaomiAudioPayload = {
+  choices?: Array<{
+    message?: {
+      content?: string | Array<{ text?: string }>;
+      reasoning_content?: string;
+    };
+  }>;
+};
 
 function resolveModel(model?: string): string {
   const trimmed = model?.trim();
   return trimmed || DEFAULT_XIAOMI_AUDIO_MODEL;
+}
+
+function resolvePrompt(prompt?: string): string {
+  const trimmed = prompt?.trim();
+  return trimmed || DEFAULT_XIAOMI_AUDIO_PROMPT;
+}
+
+function coerceXiaomiText(payload: XiaomiAudioPayload): string | null {
+  const message = payload.choices?.[0]?.message;
+  if (!message) {
+    return null;
+  }
+  if (typeof message.content === "string" && message.content.trim()) {
+    return message.content.trim();
+  }
+  if (Array.isArray(message.content)) {
+    const text = message.content
+      .map((part) => (typeof part.text === "string" ? part.text.trim() : ""))
+      .filter(Boolean)
+      .join("\n")
+      .trim();
+    if (text) {
+      return text;
+    }
+  }
+  if (typeof message.reasoning_content === "string" && message.reasoning_content.trim()) {
+    return message.reasoning_content.trim();
+  }
+  return null;
 }
 
 export async function transcribeXiaomiAudio(
@@ -23,47 +58,55 @@ export async function transcribeXiaomiAudio(
 ): Promise<AudioTranscriptionResult> {
   const fetchFn = params.fetchFn ?? fetch;
   const baseUrl = normalizeBaseUrl(params.baseUrl, DEFAULT_XIAOMI_AUDIO_BASE_URL);
-  const allowPrivate = Boolean(params.baseUrl?.trim());
-  const url = `${baseUrl}/audio/transcriptions`;
-
   const model = resolveModel(params.model);
-  const form = new FormData();
-  const fileName = params.fileName?.trim() || path.basename(params.fileName) || "audio";
-  const bytes = new Uint8Array(params.buffer);
-  const blob = new Blob([bytes], {
-    type: params.mime ?? "application/octet-stream",
-  });
-  form.append("file", blob, fileName);
-  form.append("model", model);
-  if (params.language?.trim()) {
-    form.append("language", params.language.trim());
-  }
-  if (params.prompt?.trim()) {
-    form.append("prompt", params.prompt.trim());
-  }
+  const mime = params.mime ?? "audio/wav";
+  const prompt = params.prompt?.trim() || resolvePrompt(params.prompt);
+  const url = `${baseUrl}/chat/completions`;
 
   const headers = new Headers(params.headers);
+  if (!headers.has("content-type")) {
+    headers.set("content-type", "application/json");
+  }
   if (!headers.has("authorization")) {
     headers.set("authorization", `Bearer ${params.apiKey}`);
   }
 
-  const { response: res, release } = await postTranscriptionRequest({
+  const body = {
+    model,
+    messages: [
+      {
+        role: "user",
+        content: [
+          { type: "text", text: prompt },
+          {
+            type: "audio_url",
+            audio_url: {
+              url: `data:${mime};base64,${params.buffer.toString("base64")}`,
+            },
+          },
+        ],
+      },
+    ],
+  };
+
+  const { response: res, release } = await fetchWithTimeoutGuarded(
     url,
-    headers,
-    body: form,
-    timeoutMs: params.timeoutMs,
+    {
+      method: "POST",
+      headers,
+      body: JSON.stringify(body),
+    },
+    params.timeoutMs,
     fetchFn,
-    allowPrivateNetwork: allowPrivate,
-  });
+  );
 
   try {
     await assertOkOrThrowHttpError(res, "Xiaomi audio transcription failed");
-
-    const payload = (await res.json()) as { text?: string };
-    const text = requireTranscriptionText(
-      payload.text,
-      "Xiaomi audio transcription response missing text",
-    );
+    const payload = (await res.json()) as XiaomiAudioPayload;
+    const text = coerceXiaomiText(payload);
+    if (!text) {
+      throw new Error("Xiaomi audio transcription response missing content");
+    }
     return { text, model };
   } finally {
     await release();
