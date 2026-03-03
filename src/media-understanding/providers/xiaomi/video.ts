@@ -1,7 +1,7 @@
 import type { VideoDescriptionRequest, VideoDescriptionResult } from "../../types.js";
 import { generateOpenAiInlineDataText } from "./inline-data.js";
 
-const DEFAULT_XIAOMI_VIDEO_BASE_URL = "http://s-20251121150535-h1owo-fqueo.wlcb-prod-3-cloudml.xiaomi.srv/v1";
+const DEFAULT_XIAOMI_VIDEO_BASE_URL = "http://omni-api-10002.bcecn-bj-cloudml.xiaomi.srv/v1";
 const DEFAULT_XIAOMI_VIDEO_MODEL = "mimo_omni";
 const DEFAULT_XIAOMI_VIDEO_PROMPT = "Describe the video.";
 
