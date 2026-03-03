@@ -779,7 +779,7 @@ export function buildXiaomiProvider(): ProviderConfig {
         id: MIMO_OMNI_MODEL_ID,
         name: "Xiaomi MiMo Omni",
         reasoning: false,
-        input: ["text", "image", "audio", "video"],
+        input: ["text", "image"],  // 根据实际测试，只支持图像，不支持音频和视频
         cost: MIMO_COST,
         contextWindow: MIMO_OMNI_CONTEXT_WINDOW,
         maxTokens: MIMO_OMNI_MAX_TOKENS,
