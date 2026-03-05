@@ -989,6 +989,7 @@ export async function handleFeishuMessage(params: {
     : null;
 
   let requireMention = false; // DMs never require mention; groups may override below
+  let isMediaOnlyMessage = false; // true when requireMention=true but message is media (cannot @mention)
   if (isGroup) {
     if (groupConfig?.enabled === false) {
       log(`feishu[${account.accountId}]: group ${ctx.chatId} is disabled`);
@@ -1049,7 +1050,17 @@ export async function handleFeishuMessage(params: {
       groupConfig,
     }));
 
-    if (requireMention && !ctx.mentionedBot) {
+    // Media messages (image/audio/video) on Feishu cannot contain @mentions,
+    // so they would always be dropped when requireMention is true. Instead,
+    // let media messages through for media-understanding processing but mark
+    // them as "media-only" so the dispatch path can suppress the agent reply
+    // and only inject the understanding result into the session context.
+    isMediaOnlyMessage =
+      requireMention &&
+      !ctx.mentionedBot &&
+      ["image", "audio", "video", "media"].includes(event.message.message_type);
+
+    if (requireMention && !ctx.mentionedBot && !isMediaOnlyMessage) {
       log(`feishu[${account.accountId}]: message in group ${ctx.chatId} did not mention bot`);
       // Record to pending history for non-broadcast groups only. For broadcast groups,
       // the mentioned handler's broadcast dispatch writes the turn directly into all
@@ -1069,6 +1080,12 @@ export async function handleFeishuMessage(params: {
         });
       }
       return;
+    }
+
+    if (isMediaOnlyMessage) {
+      log(
+        `feishu[${account.accountId}]: media message in group ${ctx.chatId} — will process media understanding without agent reply`,
+      );
     }
   } else {
   }
@@ -1381,7 +1398,7 @@ export async function handleFeishuMessage(params: {
           ctx.mentionedBot && agentId === activeAgentId,
         );
 
-        if (agentId === activeAgentId) {
+        if (agentId === activeAgentId && !isMediaOnlyMessage) {
           // Active agent: real Feishu dispatcher (responds on Feishu)
           const { dispatcher, replyOptions, markDispatchIdle } = createFeishuReplyDispatcher({
             cfg,
@@ -1481,47 +1498,74 @@ export async function handleFeishuMessage(params: {
         ctx.mentionedBot,
       );
 
-      const { dispatcher, replyOptions, markDispatchIdle } = createFeishuReplyDispatcher({
-        cfg,
-        agentId: route.agentId,
-        runtime: runtime as RuntimeEnv,
-        chatId: ctx.chatId,
-        replyToMessageId: replyTargetMessageId,
-        skipReplyToInMessages: !isGroup,
-        replyInThread,
-        rootId: ctx.rootId,
-        threadReply,
-        mentionTargets: ctx.mentionTargets,
-        accountId: account.accountId,
-        messageCreateTimeMs,
-      });
+      // For media-only messages (requireMention=true, no @mention, but media type),
+      // use a noop dispatcher so media understanding runs and the result is stored
+      // in the session context, but no reply is sent back to the chat.
+      if (isMediaOnlyMessage) {
+        const noopDispatcher = {
+          sendToolResult: () => false,
+          sendBlockReply: () => false,
+          sendFinalReply: () => false,
+          waitForIdle: async () => {},
+          getQueuedCounts: () => ({ tool: 0, block: 0, final: 0 }),
+          markComplete: () => {},
+        };
 
-      log(`feishu[${account.accountId}]: dispatching to agent (session=${route.sessionKey})`);
-      const { queuedFinal, counts } = await core.channel.reply.withReplyDispatcher({
-        dispatcher,
-        onSettled: () => {
-          markDispatchIdle();
-        },
-        run: () =>
-          core.channel.reply.dispatchReplyFromConfig({
-            ctx: ctxPayload,
-            cfg,
-            dispatcher,
-            replyOptions,
-          }),
-      });
-
-      if (isGroup && historyKey && chatHistories) {
-        clearHistoryEntriesIfEnabled({
-          historyMap: chatHistories,
-          historyKey,
-          limit: historyLimit,
+        log(
+          `feishu[${account.accountId}]: media-only dispatch (no reply) to agent (session=${route.sessionKey})`,
+        );
+        await core.channel.reply.withReplyDispatcher({
+          dispatcher: noopDispatcher,
+          run: () =>
+            core.channel.reply.dispatchReplyFromConfig({
+              ctx: ctxPayload,
+              cfg,
+              dispatcher: noopDispatcher,
+            }),
         });
-      }
+      } else {
+        const { dispatcher, replyOptions, markDispatchIdle } = createFeishuReplyDispatcher({
+          cfg,
+          agentId: route.agentId,
+          runtime: runtime as RuntimeEnv,
+          chatId: ctx.chatId,
+          replyToMessageId: replyTargetMessageId,
+          skipReplyToInMessages: !isGroup,
+          replyInThread,
+          rootId: ctx.rootId,
+          threadReply,
+          mentionTargets: ctx.mentionTargets,
+          accountId: account.accountId,
+          messageCreateTimeMs,
+        });
 
-      log(
-        `feishu[${account.accountId}]: dispatch complete (queuedFinal=${queuedFinal}, replies=${counts.final})`,
-      );
+        log(`feishu[${account.accountId}]: dispatching to agent (session=${route.sessionKey})`);
+        const { queuedFinal, counts } = await core.channel.reply.withReplyDispatcher({
+          dispatcher,
+          onSettled: () => {
+            markDispatchIdle();
+          },
+          run: () =>
+            core.channel.reply.dispatchReplyFromConfig({
+              ctx: ctxPayload,
+              cfg,
+              dispatcher,
+              replyOptions,
+            }),
+        });
+
+        if (isGroup && historyKey && chatHistories) {
+          clearHistoryEntriesIfEnabled({
+            historyMap: chatHistories,
+            historyKey,
+            limit: historyLimit,
+          });
+        }
+
+        log(
+          `feishu[${account.accountId}]: dispatch complete (queuedFinal=${queuedFinal}, replies=${counts.final})`,
+        );
+      }
     }
   } catch (err) {
     error(`feishu[${account.accountId}]: failed to dispatch message: ${String(err)}`);
