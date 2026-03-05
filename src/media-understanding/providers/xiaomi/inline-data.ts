@@ -1,9 +1,4 @@
-import type { AudioTranscriptionRequest, AudioTranscriptionResult, VideoDescriptionRequest, VideoDescriptionResult } from "../../types.js";
-import {
-  assertOkOrThrowHttpError,
-  normalizeBaseUrl,
-  fetchWithTimeoutGuarded,
-} from "../shared.js";
+import { assertOkOrThrowHttpError, normalizeBaseUrl, fetchWithTimeoutGuarded } from "../shared.js";
 
 type OpenAiInlineDataPayload = {
   choices?: Array<{
@@ -74,21 +69,19 @@ export async function generateOpenAiInlineDataText(params: {
   }
 
   const mediaUrl = `data:${mime};base64,${params.buffer.toString("base64")}`;
-  const mediaContent = params.mediaType === "audio_url" 
-    ? { type: "audio_url", audio_url: { url: mediaUrl } }
-    : params.mediaType === "video_url"
-    ? { type: "video_url", video_url: { url: mediaUrl } }
-    : { type: "image_url", image_url: { url: mediaUrl } };
+  const mediaContent =
+    params.mediaType === "audio_url"
+      ? { type: "audio_url", audio_url: { url: mediaUrl } }
+      : params.mediaType === "video_url"
+        ? { type: "video_url", video_url: { url: mediaUrl } }
+        : { type: "image_url", image_url: { url: mediaUrl } };
 
   const body = {
     model,
     messages: [
       {
         role: "user",
-        content: [
-          { type: "text", text: prompt },
-          mediaContent,
-        ],
+        content: [{ type: "text", text: prompt }, mediaContent],
       },
     ],
   };
@@ -102,6 +95,7 @@ export async function generateOpenAiInlineDataText(params: {
     },
     params.timeoutMs,
     fetchFn,
+    { ssrfPolicy: { allowPrivateNetwork: true } },
   );
 
   try {
